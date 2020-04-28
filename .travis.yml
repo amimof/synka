@@ -1,0 +1,58 @@
+os: linux
+dist: xenial
+language: go
+go:
+  - "1.13"
+  
+stages:
+- test
+- build
+- deploy
+
+jobs:
+  include:
+  - stage: test
+    name: "Verify"
+    script: 
+    - make checkfmt
+    - make fmt  
+    - make vet 
+    - make race
+    - make gocyclo
+    - make lint 
+    - make ineffassign
+    - make misspell
+
+  - name: "Unit Test"
+    script:
+    - make test
+    - make benchmark
+    - make coverage
+    - bash <(curl -s https://codecov.io/bash)
+
+  - name: "Compile"
+    stage: build
+    script: 
+    - make
+
+  - stage: deploy
+    name: "GitHub Releases"
+    script:
+    - GOOS=linux GOARCH=amd64 BUILDPATH=./bin/synka-linux-amd64 make
+    - GOOS=linux GOARCH=arm BUILDPATH=./bin/synka-linux-arm make
+    - GOOS=linux GOARCH=arm64 BUILDPATH=./bin/synka-linux-arm64 make
+    - GOOS=windows GOARCH=amd64 BUILDPATH=./bin/synka-windows-amd64.exe make
+    - GOOS=darwin GOARCH=amd64 BUILDPATH=./bin/synka-darwin-amd64 make
+    deploy:
+      provider: releases
+      api_key: ${GITHUB_API_KEY}
+      file:
+      - bin/synka-linux-amd64
+      - bin/synka-linux-arm
+      - bin/synka-linux-arm64
+      - bin/synka-windows-amd64.exe
+      - bin/synka-darwin-amd64
+      skip_cleanup: true
+      draft: true
+      on:
+        tags: true
