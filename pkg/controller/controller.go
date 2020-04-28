@@ -2,37 +2,35 @@ package controller
 
 import (
 	"fmt"
-	"time"
-	"k8s.io/klog"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog"
+	"time"
 )
 
 // Controller is a k8s controller implementation
 type Controller struct {
-	queue	workqueue.RateLimitingInterface
+	queue   workqueue.RateLimitingInterface
 	factory dynamicinformer.DynamicSharedInformerFactory
-	gvr	*schema.GroupVersionResource
+	gvr     *schema.GroupVersionResource
 	indexer cache.Indexer
 }
-
 
 // New creates a new instance of controller
 func New(client dynamic.Interface, gvr *schema.GroupVersionResource) *Controller {
 	return &Controller{
 		factory: dynamicinformer.NewFilteredDynamicSharedInformerFactory(client, 0, v1.NamespaceAll, nil),
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "synka.io"),
-		gvr: gvr,
+		queue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "synka.io"),
+		gvr:     gvr,
 	}
 }
-
 
 // Run will set up the event handlers for types we are interested in, as well
 // as syncing informer caches and starting workers. It will block until stop channel
@@ -43,11 +41,10 @@ func (c *Controller) Run(stop chan struct{}) {
 	defer c.queue.ShutDown()
 	klog.Infof("Starting controller %s", c.gvr.GroupVersion().String())
 
-	
 	informer := c.factory.ForResource(*c.gvr)
 	c.indexer = informer.Informer().GetIndexer()
 	go c.startWatching(stop, informer.Informer())
-	
+
 	if !cache.WaitForCacheSync(stop, informer.Informer().HasSynced) {
 		runtime.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
 		return
@@ -77,7 +74,6 @@ func (c *Controller) processNextItem() bool {
 	c.handleErr(err, key)
 	return true
 }
-
 
 func (c *Controller) syncToStdout(key string) error {
 	obj, exists, err := c.indexer.GetByKey(key)

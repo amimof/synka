@@ -1,21 +1,20 @@
 package main
 
 import (
+	"github.com/amimof/synka/pkg/controller"
 	"github.com/spf13/pflag"
-	"k8s.io/klog"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog"
 	"os"
 	"os/signal"
-	"github.com/amimof/synka/pkg/controller"
 )
-
 
 var (
 	masterURL  string
 	kubeconfig string
-	informers 	[]string
+	informers  []string
 )
 
 func init() {
@@ -25,7 +24,7 @@ func init() {
 }
 
 func main() {
-	
+
 	// Setup logging and parse flags
 	klog.InitFlags(nil)
 	pflag.Parse()
@@ -40,7 +39,7 @@ func main() {
 		klog.Fatalf("Error creating dynamic client for config: %s", err.Error())
 	}
 
-	// Create & run a controller for each of the configured informers 
+	// Create & run a controller for each of the configured informers
 	stopper := make(chan struct{})
 	for _, informer := range informers {
 		gvr, _ := schema.ParseResourceArg(informer)
@@ -52,6 +51,6 @@ func main() {
 	sigCh := make(chan os.Signal, 0)
 	signal.Notify(sigCh, os.Kill, os.Interrupt)
 	<-sigCh
-	
+
 	klog.Info("Server stopped")
 }
