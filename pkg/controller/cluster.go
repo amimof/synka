@@ -25,6 +25,7 @@ type Cluster struct {
 	Ca                    string `yaml:"ca,omitempty"`
 	Token                 string `yaml:"token,omitempty"`
 	client                dynamic.Interface
+	err                   error
 }
 
 // GetClient creates and returns a dynamic client that can be used to interact with a cluster
@@ -32,20 +33,11 @@ func (c *Cluster) GetClient(gvr *schema.GroupVersionResource) (dynamic.Interface
 	if c.client != nil {
 		return c.client, nil
 	}
-	config := api.NewConfig()
-	config.Clusters[c.Name] = api.NewCluster()
-	config.Clusters[c.Name].Server = c.Server
-	config.Clusters[c.Name].InsecureSkipTLSVerify = c.InsecureSkipTLSVerify
-	config.Clusters[c.Name].CertificateAuthorityData = b64ToBytes(c.Ca)
-	config.AuthInfos[c.Name] = api.NewAuthInfo()
-	config.AuthInfos[c.Name].ClientCertificateData = b64ToBytes(c.Cert)
-	config.AuthInfos[c.Name].ClientKeyData = b64ToBytes(c.Key)
-	config.AuthInfos[c.Name].Token = c.Token
-	config.Contexts[c.Name] = api.NewContext()
-	config.Contexts[c.Name].Cluster = c.Name
-	config.Contexts[c.Name].AuthInfo = c.Name
-	config.CurrentContext = c.Name
 
+	// Acquire config
+	config := getConfigForCluster(c)
+
+	// Create a client configuration instance
 	clientconfig, err := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
 		return nil, err
@@ -53,6 +45,7 @@ func (c *Cluster) GetClient(gvr *schema.GroupVersionResource) (dynamic.Interface
 	clientconfig.GroupVersion = &v1.SchemeGroupVersion
 	clientconfig.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 
+	// Create the dynamic client
 	client, err := dynamic.NewForConfig(clientconfig)
 	if err != nil {
 		return nil, err
@@ -70,4 +63,23 @@ func b64ToBytes(str string) []byte {
 		return b
 	}
 	return data
+}
+
+// getConfigForCluster creates an instance api.Config that can be used to create a client config
+// that in turn is used to create a dynamic client.
+func getConfigForCluster(c *Cluster) *api.Config {
+	config := api.NewConfig()
+	config.Clusters[c.Name] = api.NewCluster()
+	config.Clusters[c.Name].Server = c.Server
+	config.Clusters[c.Name].InsecureSkipTLSVerify = c.InsecureSkipTLSVerify
+	config.Clusters[c.Name].CertificateAuthorityData = b64ToBytes(c.Ca)
+	config.AuthInfos[c.Name] = api.NewAuthInfo()
+	config.AuthInfos[c.Name].ClientCertificateData = b64ToBytes(c.Cert)
+	config.AuthInfos[c.Name].ClientKeyData = b64ToBytes(c.Key)
+	config.AuthInfos[c.Name].Token = c.Token
+	config.Contexts[c.Name] = api.NewContext()
+	config.Contexts[c.Name].Cluster = c.Name
+	config.Contexts[c.Name].AuthInfo = c.Name
+	config.CurrentContext = c.Name
+	return config
 }

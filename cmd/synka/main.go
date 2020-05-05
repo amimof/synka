@@ -36,7 +36,7 @@ var (
 
 func init() {
 	pflag.StringVar(&config, "config", "/etc/synka/config.yaml", "Path to synka configuration file.")
-	pflag.StringVar(&kubeconfig, "kubeconfig", "~/.kube/config", "Path to a kubeconfig. Only required if out-of-cluster. Synka synchronises configuration from the current-context defined in this file to contextes in kubeconfig defined by --config.")
+	pflag.StringVar(&kubeconfig, "kubeconfig", "~/.kube/config", "Path to a kubeconfig. Only required if out-of-cluster. Synka synchronises configuration from the current-context defined in this file to contexts in kubeconfig defined by --config.")
 	pflag.StringVar(&masterURL, "master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
 	pflag.StringSliceVar(&informers, "informer", defaultInformers, "Resource to watch. This flag can be used multiple times.")
 }

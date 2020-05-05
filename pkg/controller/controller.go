@@ -80,45 +80,46 @@ func (c *Controller) processNextItem() bool {
 }
 
 func (c *Controller) syncToStdout(key string) error {
-	obj, exists, err := c.indexer.GetByKey(key)
 
+	obj, exists, err := c.indexer.GetByKey(key)
 	if err != nil {
 		klog.Errorf("Fetching objects witch key %s from store failed with %v", key, err)
 		return err
 	}
 
-	u := obj.(*unstructured.Unstructured)
-
+	// Handle deletes
 	if !exists {
-		klog.Infof("Resource %s does not exists anymore", key)
-	} else {
+		klog.V(4).Infof("Resource %s does not exists anymore", key)
+		return nil
+	}
 
-		for _, cluster := range c.config.Clusters {
+	// Loop through the list of clusters and create the resource on each of them
+	u := obj.(*unstructured.Unstructured)
+	for _, cluster := range c.config.Clusters {
 
-			// Get a client for the GroupVersionResource
-			client, err := cluster.GetClient(c.gvr)
-			if err != nil {
-				return err
-			}
+		// Get a client for the GroupVersionResource
+		client, err := cluster.GetClient(c.gvr)
+		if err != nil {
+			return err
+		}
 
-			// Only go any further if object is annotated properly
-			a := u.GetAnnotations()
-			if _, ok := a["synka.io/sync"]; ok {
-				if a["synka.io/sync"] == "true" {
+		// Only go any further if object is annotated properly
+		a := u.GetAnnotations()
+		if _, ok := a["synka.io/sync"]; ok {
+			if a["synka.io/sync"] == "true" {
 
-					klog.V(4).Infof("Sync %s/%s: %s", u.GetAPIVersion(), u.GetKind(), u.GetName())
+				// Remove any immutable fields
+				delete(u.Object["metadata"].(map[string]interface{}), "resourceVersion")
+				delete(u.Object["metadata"].(map[string]interface{}), "uid")
 
-					// Remove any immutable fields
-					u.Object["metadata"].(map[string]interface{})["resourceVersion"] = ""
-
-					// Create the resource in target cluster using the cluters's dynamic client
-					result, err := client.Resource(*c.gvr).Namespace(u.GetNamespace()).Create(context.Background(), u, v1.CreateOptions{})
-					if err != nil {
-						return err
-					}
-					klog.V(4).Infof("Created %s/%s on %s", result.GetKind(), result.GetName(), cluster.Name)
-
+				// Check to see if the resource already exists
+				result, err := updateOrCreate(client, c.gvr, u)
+				if err != nil {
+					return err
 				}
+
+				klog.V(4).Infof("Synced %s/%s/%s on %s", u.GetAPIVersion(), result.GetKind(), result.GetName(), cluster.Name)
+
 			}
 		}
 	}
@@ -126,6 +127,25 @@ func (c *Controller) syncToStdout(key string) error {
 	return nil
 }
 
+// updateOrCreate will do a get on the given resource and if it doesn't exists then it will be created.
+// If the get returns something then it will update it instead.
+func updateOrCreate(client dynamic.Interface, gvr *schema.GroupVersionResource, u *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+
+	var result *unstructured.Unstructured
+
+	// Get the resource to see if it already exits. Errors are ignored here but handled later on when creating/updating
+	result, _ = client.Resource(*gvr).Namespace(u.GetNamespace()).Get(context.Background(), u.GetName(), v1.GetOptions{})
+
+	// Create the resource if the get returns nil
+	if result == nil {
+		return client.Resource(*gvr).Namespace(u.GetNamespace()).Create(context.Background(), u, v1.CreateOptions{})
+	} 
+
+	// Update existing resource if the get returns data
+	return client.Resource(*gvr).Namespace(u.GetNamespace()).Update(context.Background(), u, v1.UpdateOptions{})
+}
+
+// handleErr
 func (c *Controller) handleErr(err error, key interface{}) {
 	if err == nil {
 		c.queue.Forget(key)
@@ -144,23 +164,18 @@ func (c *Controller) handleErr(err error, key interface{}) {
 func (c *Controller) startWatching(stopCh <-chan struct{}, s cache.SharedIndexInformer) {
 	handlers := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			// u := obj.(*unstructured.Unstructured)
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
 				c.queue.Add(key)
 			}
 		},
 		UpdateFunc: func(old, new interface{}) {
-			//u := obj.(*unstructured.Unstructured)
-			//klog.Infof("received update event! %s", u.GroupVersionKind())
 			key, err := cache.MetaNamespaceKeyFunc(new)
 			if err == nil {
 				c.queue.Add(key)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			//u := obj.(*unstructured.Unstructured)
-			//klog.Infof("received update event! %s", u.GroupVersionKind())
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			if err == nil {
 				c.queue.Add(key)
