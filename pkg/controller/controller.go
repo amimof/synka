@@ -139,7 +139,7 @@ func updateOrCreate(client dynamic.Interface, gvr *schema.GroupVersionResource, 
 	// Create the resource if the get returns nil
 	if result == nil {
 		return client.Resource(*gvr).Namespace(u.GetNamespace()).Create(context.Background(), u, v1.CreateOptions{})
-	} 
+	}
 
 	// Update existing resource if the get returns data
 	return client.Resource(*gvr).Namespace(u.GetNamespace()).Update(context.Background(), u, v1.UpdateOptions{})

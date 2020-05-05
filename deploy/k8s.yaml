@@ -1,0 +1,48 @@
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: synka-config
+  labels:
+    app: synka
+data:
+  config.yaml: |
+    clusters: []
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synka
+  labels:
+    app: synka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synka
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: synka
+    spec:
+      containers:
+        - name: synka
+          image: 'amimof/synka:latest'
+          resources:
+            limits:
+              cpu: 250m
+              memory: 256Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: synka-config
+              readOnly: true
+              mountPath: /etc/synka
+          imagePullPolicy: Always
+      volumes:
+        - name: synka-config
+          configMap:
+            name: synka-config
+            defaultMode: 420
