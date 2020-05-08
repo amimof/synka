@@ -97,30 +97,29 @@ func (c *Controller) syncToStdout(key string) error {
 	u := obj.(*unstructured.Unstructured)
 	for _, cluster := range c.config.Clusters {
 
-		// Get a client for the GroupVersionResource
-		client, err := cluster.GetClient(c.gvr)
-		if err != nil {
-			return err
-		}
+		// Create a sync config
+		sc := NewSyncConfigFrom(u.GetAnnotations())
 
 		// Only go any further if object is annotated properly
-		a := u.GetAnnotations()
-		if _, ok := a["synka.io/sync"]; ok {
-			if a["synka.io/sync"] == "true" {
+		if sc.Sync {
 
-				// Remove any immutable fields
-				delete(u.Object["metadata"].(map[string]interface{}), "resourceVersion")
-				delete(u.Object["metadata"].(map[string]interface{}), "uid")
+			// Remove any immutable fields
+			delete(u.Object["metadata"].(map[string]interface{}), "resourceVersion")
+			delete(u.Object["metadata"].(map[string]interface{}), "uid")
 
-				// Check to see if the resource already exists
-				result, err := updateOrCreate(client, c.gvr, u)
-				if err != nil {
-					return err
-				}
-
-				klog.V(4).Infof("Synced %s/%s/%s on %s", u.GetAPIVersion(), result.GetKind(), result.GetName(), cluster.Name)
-
+			// Get a client for the GroupVersionResource
+			client, err := cluster.GetClient(c.gvr)
+			if err != nil {
+				return err
 			}
+
+			// Check to see if the resource already exists
+			result, err := updateOrCreate(client, c.gvr, u, !sc.SkipExisting)
+			if err != nil {
+				return err
+			}
+
+			klog.V(2).Infof("Synced %s/%s/%s on %s", u.GetAPIVersion(), result.GetKind(), result.GetName(), cluster.Name)
 		}
 	}
 
@@ -129,7 +128,7 @@ func (c *Controller) syncToStdout(key string) error {
 
 // updateOrCreate will do a get on the given resource and if it doesn't exists then it will be created.
 // If the get returns something then it will update it instead.
-func updateOrCreate(client dynamic.Interface, gvr *schema.GroupVersionResource, u *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func updateOrCreate(client dynamic.Interface, gvr *schema.GroupVersionResource, u *unstructured.Unstructured, replace bool) (*unstructured.Unstructured, error) {
 
 	var result *unstructured.Unstructured
 
@@ -141,8 +140,12 @@ func updateOrCreate(client dynamic.Interface, gvr *schema.GroupVersionResource, 
 		return client.Resource(*gvr).Namespace(u.GetNamespace()).Create(context.Background(), u, v1.CreateOptions{})
 	}
 
-	// Update existing resource if the get returns data
-	return client.Resource(*gvr).Namespace(u.GetNamespace()).Update(context.Background(), u, v1.UpdateOptions{})
+	// Update existing resource if the get returns data and if replace is true
+	if replace {
+		return client.Resource(*gvr).Namespace(u.GetNamespace()).Update(context.Background(), u, v1.UpdateOptions{})
+	}
+
+	return result, nil
 }
 
 // handleErr
