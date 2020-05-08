@@ -6,7 +6,6 @@ import (
 
 const (
 	syncAnnotationKey         = "synka.io/sync"
-	clustersAnnotationKey     = "synka.io/clusters"
 	skipExistingAnnotationKey = "synka.io/skip-existing"
 )
 
